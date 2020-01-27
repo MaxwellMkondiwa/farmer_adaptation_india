@@ -1,0 +1,339 @@
+#######################################################################
+#Objetive: Developing proportional odds model to understand 
+#how different factors influence farmers' adaptations in Northern India
+
+#Author: Asif Ishtiaque (School of Environment and Sustainability, University of Michigan 
+#Note: For files, please contact Asif Ishtiaque at "asis@umich.edu"
+########################################################################
+
+library (car)
+library (MASS)
+library (readxl)
+library (DescTools)
+library (generalhoslem)
+library (dplyr)
+
+setwd("C:/Users/asis/Desktop/Sow date")
+
+data_2019 <- read.csv ("2019_all_new.csv")
+data_2019_irrig <- read.csv ("2019_irrig_till_new.csv")
+data_2019_1 <- merge (data_2019, data_2019_irrig, by = "Farmer_Unique_ID", all = T)
+
+names (data_2019_1)
+
+data_2016 <- read.csv ("2016_all_new.csv")
+names (data_2016)
+
+data_2016_n <- subset (data_2016, select = c("Farmer_Unique_ID", "subsidy_electric", "norisk", "highrisk"))
+names (data_2016_n)
+
+d19 <- merge (data_2019_1, data_2016_n, by = "Farmer_Unique_ID", all = T)
+names (d19)
+
+
+#################################################################
+#Additional information (newly added from different survey data)
+#################################################################
+
+#Risk behave from 2016
+data_2016_2 <- read.csv ("survey_2016.csv")
+names (data_2016_2)
+d16 <- subset (data_2016_2, select = c("Farmer_Unique_ID", "risk_behave", "rain_change"))
+d19_1 <- merge (d19, d16, by = "Farmer_Unique_ID", all = T) 
+
+#Some variables from 2018 
+data_2018 <- read.csv ("2018_all_new.csv")
+names (data_2018)
+d18 <- subset (data_2018, select = c("Farmer_Unique_ID", "wi", "gw_change", "water_table"))
+d19_2 <- merge (d19_1, d18, by = "Farmer_Unique_ID", all = T) 
+names (d19_2)
+
+#More variables from 2019
+data_2019_2 <- read_excel("survey_2019_viz.xlsx")
+names (data_2019_2)
+
+data_2019_2$kc_paddy_n <- ifelse (data_2019_2$kc_same_plot %in% "Paddy" | data_2019_2$kc_same_plot_2 %in% "Paddy", 1,
+                                  ifelse (data_2019_2$kc_same_plot %in% NA & data_2019_2$kc_same_plot_2 %in% NA, NA, 0))
+
+data_2019_2 %>% count (kc_harvest_month)
+
+data_2019_2$kchm <- as.character(data_2019_2$kc_harvest_month) 
+
+data_2019_2$kc_harvest_month_inweeks <- ifelse (data_2019_2$kchm %in% "June", 22,
+                                                ifelse (data_2019_2$kchm %in% "July", 26,
+                                                        ifelse (data_2019_2$kchm %in% "August", 31,
+                                                                ifelse (data_2019_2$kchm %in% "September", 35,
+                                                                        ifelse (data_2019_2$kchm %in% "October", 39,
+                                                                                ifelse (data_2019_2$kchm %in% "November", 44,
+                                                                                        ifelse (data_2019_2$kchm %in% "December", 48,
+                                                                                                ifelse (data_2019_2$kchm %in% "January", 52,
+                                                                                                        ifelse (data_2019_2$kchm %in% "February", 57,
+                                                                                                                ifelse (data_2019_2$kchm %in% "March", 61,
+                                                                                                                        ifelse (data_2019_2$kchm %in% 
+                                                                                                                                  "April", 65, 
+                                                                                                                                NA)))))))))))
+
+#Adding the converted month values (in weeks) to the week column
+
+data_2019_2$kc_harvest_date <- data_2019_2$kc_harvest_month_inweeks + data_2019_2$kc_harvest_week
+data_2019_2$wheat_ploughing <- data_2019_2$ploughing
+
+
+#irrigation
+data_2019_2 %>% count (irrig_source, irrig_source_2)
+data_2019_2$irrig_canal_n_2 <- ifelse (data_2019_2$irrig_source %in% 1 & data_2019_2$irrig_source_2 %in% NA, 1, 0) 
+data_2019_2$irrig_personal_n_2 <- ifelse (data_2019_2$irrig_source %in% 2 & data_2019_2$irrig_source_2 %in% NA, 1, 0) 
+data_2019_2$irrig_canal_personal_n <- ifelse ((data_2019_2$irrig_source %in% 1 & data_2019_2$irrig_source_2 %in% 2) |
+                                                (data_2019_2$irrig_source %in% 2 & data_2019_2$irrig_source_2 %in% 1), 1, 0) 
+data_2019_2$irrig_any_tubewell_n <- ifelse ((data_2019_2$irrig_source %in% 2 & data_2019_2$irrig_source_2 %in% 3) |
+                                              (data_2019_2$irrig_source %in% 3 & data_2019_2$irrig_source_2 %in% 2) |
+                                              (data_2019_2$irrig_source %in% 2 & data_2019_2$irrig_source_2 %in% NA) |
+                                              (data_2019_2$irrig_source %in% 3 & data_2019_2$irrig_source_2 %in% NA), 1, 0) 
+
+data_2019_2 %>% count (irrig_canal_n_2, irrig_canal_personal_n, irrig_personal_n_2, irrig_any_tubewell_n)
+names (data_2019_2)
+
+data_2019_2_sub <- subset (data_2019_2, select = c("Farmer_Unique_ID", "kc_paddy_n", "kc_harvest_date", "wheat_ploughing", 
+                                                   "irrig_any_tubewell_n", "irrig_canal_n_2", "irrig_canal_personal_n", 
+                                                   "irrig_personal_n_2"))
+names (data_2019_2_sub)
+
+
+#Nursery data
+data_2019_3 <- read_excel("IGP_ENDLINE_DATA_2019_Shared_May 29.xlsx")
+data_2019_3$nurs_mnth <- as.character(data_2019_3$`_6_b_6_a_1_Month`)
+data_2019_3$nurs_wk <- as.numeric(data_2019_3$`_6_b_6_a_2_Day`)
+data_2019_3 %>% count ("nurs_mnth")
+
+data_2019_3$nurs_mnth_wk <- as.numeric(ifelse (data_2019_3$nurs_mnth %in% "March", 9,
+                                               ifelse (data_2019_3$nurs_mnth %in% "April", 13,
+                                                       ifelse (data_2019_3$nurs_mnth %in% "May", 17,
+                                                               ifelse (data_2019_3$nurs_mnth %in% "June", 22,
+                                                                       ifelse (data_2019_3$nurs_mnth %in% "July", 26, NA))))))
+
+data_2019_3$nursery_date <- as.numeric (data_2019_3$nurs_mnth_wk + data_2019_3$nurs_wk)
+
+data_2019_3 %>% count ("nursery_date")
+
+data_2019_3_sub <- subset (data_2019_3, select = c("Farmer_Unique_ID", "nursery_date"))
+
+d19_3_1 <- merge (d19_2, data_2019_2_sub, by = "Farmer_Unique_ID", all = T)
+d19_3 <- merge (d19_3_1, data_2019_3_sub, by = "Farmer_Unique_ID", all = T)
+
+#Zero tillage
+d19_3$wheat_sowzt <- ifelse (d19_3$wheat_sowbroad %in% 0 & d19_3$wheat_sowdrill %in% 0,1,0)
+
+names (d19_3)
+
+
+###################################################################
+#Removing the outliers from the response variable
+###################################################################
+d19_3 %>% count (wheat_sow_date)
+d19_n <- subset (d19_3, wheat_sow_date > 39 & wheat_sow_date <54 & kc_harvest_date >34 & kc_harvest_date <50)
+
+names (d19_n)
+
+d19_n$soil_sandy <- ifelse (d19_n$soil_loam %in% 0 & d19_n$soil_clay %in% 0, 1, 0)
+d19_n$rain_change_n <- ifelse (d19_n$rain_change %in% 1, 0, ifelse (d19_n$rain_change %in% NA, NA, 1))
+
+#############################################################################################################
+#Considering only those farmers who cultivated paddy in Kharif season
+############################################################################################################
+
+#Dependent variable: wheat sow date
+
+d19_paddy <- subset (d19_n, kc_paddy_n == 1 & kc_harvest_date >34 & kc_harvest_date <50)
+
+d19_paddy$wsd <- as.factor (d19_paddy$wheat_sow_date)
+d19_paddy$ksd <- as.factor (d19_paddy$kc_sow_date)
+d19_paddy$hsd <- as.factor (d19_paddy$kc_harvest_date)
+d19_paddy$nsd <- as.factor (d19_paddy$nursery_date)
+d19_paddy$fallow_n <- d19_paddy$fallow_kcrabi/7
+d19_paddy$wheat_ploughing_n <- ifelse (d19_paddy$wheat_ploughing %in% c(0,1), 2,
+                                       ifelse (d19_paddy$wheat_ploughing %in% c(6, 7, 9,20), 5,
+                                               d19_paddy$wheat_ploughing))
+
+dp_w <- wsd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + wheat_sowbroad + wheat_sowzt + 
+  wheat_till_culti_n + wheat_till_harrow_n + wheat_till_culti_harrow + kc_sow_date +  ideal_sow_date + kc_duration + 
+  fallow_n + kc_till_culti + kc_till_harrow + kc_harvest_manual + kc_rotate + temp_change + wetstart_2018  + Age_19 + 
+  State + monrain_2018 + sdii_2018 + wetend_2018 + kc_harvest_date + wheat_ploughing_n + wi + kc_trans 
+
+
+ord_w <- polr(dp_w, data = d19_paddy, Hess = T)
+PseudoR2(ord_w, which = c("all"))
+lipsitz.test(ord_w)
+
+coef_ord <- coef(summary(ord_w))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_w))
+conf <- exp(confint(ord_w, level = 0.95))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+###########Dependent variable: kc sow date
+
+dp_ks <- ksd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + kc_duration + 
+  kc_till_culti + kc_till_harrow + temp_change + wetstart_2018  + Age_19 + 
+  State + monrain_2018 + sdii_2018 + wetend_2018 + wi + kc_trans
+
+ord_ks <- polr(dp_ks, data = d19_paddy, Hess = T)
+PseudoR2(ord_ks, which = c("all"))
+
+coef_ord <- coef(summary(ord_ks))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_ks))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+############Dependent variable: kc harvest time
+
+dp_hsd <- hsd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + kc_sow_date + kc_duration + 
+  kc_till_culti + kc_till_harrow + kc_harvest_manual + temp_change + wetstart_2018  + Age_19 + 
+  State + monrain_2018 + sdii_2018 + wetend_2018 + wi + kc_trans
+
+ord_hs <- polr(dp_hsd, data = d19_paddy, Hess = T)
+PseudoR2(ord_hs, which = c("all"))
+
+coef_ord <- coef(summary(ord_hs))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_hs))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+############Dependent variable: kc harvest time
+
+d19_paddy$fsd <- as.factor(d19_paddy$fallow_n)
+
+
+dp_fsd <- fsd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + wheat_sowbroad + wheat_sowzt + 
+  wheat_till_culti_n + wheat_till_harrow_n + wheat_till_culti_harrow + kc_sow_date +  ideal_sow_date + kc_duration + 
+  wheat_sow_date + kc_till_culti + kc_till_harrow + kc_harvest_manual + kc_rotate + temp_change + wetstart_2018  + Age_19 + 
+  State + monrain_2018 + sdii_2018 + wetend_2018 + kc_harvest_date + wheat_ploughing_n + wi + kc_trans
+
+ord_fs <- polr(dp_fsd, data = d19_paddy, Hess = T)
+PseudoR2(ord_fs, which = c("all"))
+
+coef_ord <- coef(summary(ord_fs))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_fs))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#############Dependent variable: Nursery establishment date
+
+dp_n <- nsd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + kc_sow_date + kc_duration + temp_change + 
+  wetstart_2018  + Age_19 + State + monrain_2018 + sdii_2018 + wetend_2018 + wi 
+
+
+ord_n <- polr(dp_n, data = d19_paddy, Hess = T)
+PseudoR2(ord_n, which = c("all"))
+
+coef_ord <- coef(summary(ord_n))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_n))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+
+##############################################
+#State wise model (Y = wsd)
+#############################################
+op_state <- wsd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + wheat_sowbroad + wheat_sowzt + 
+  wheat_till_culti_n + wheat_till_harrow_n + wheat_till_culti_harrow + kc_sow_date +  ideal_sow_date + kc_duration + 
+  fallow_n + kc_till_culti + kc_till_harrow + kc_harvest_manual + kc_rotate + temp_change + wetstart_2018  + Age_19 + 
+  Site + monrain_2018 + sdii_2018 + wetend_2018 + kc_harvest_date + wheat_ploughing_n + wi + kc_trans
+
+#Haryana
+ord_har <- polr(op_state, data = subset (d19_paddy, State == 1), Hess = T)
+coef_ord <- coef(summary(ord_har))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_har))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#Punjab
+
+ord_pun <- polr(op_state, data = subset (d19_paddy, State == 2), Hess = T)
+coef_ord <- coef(summary(ord_pun))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_pun))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#UP
+
+ord_up <- polr(op_state, data = subset (d19_paddy, State == 3), Hess = T)
+coef_ord <- coef(summary(ord_up))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_up))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#Bihar
+
+ord_bhr <- polr(op_state, data = subset (d19_paddy, State == 4), Hess = T)
+coef_ord <- coef(summary(ord_bhr))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_bhr))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+
+##############################################
+#State wise model (Y = ksd)
+#############################################
+
+op_state <- ksd ~ soil_loam + soil_sandy + topo_low + topo_mix + irrig_any_tubewell_n + kc_duration + 
+  kc_till_culti + kc_till_harrow + temp_change + wetstart_2018  + Age_19 + 
+  State + monrain_2018 + sdii_2018 + wetend_2018 + wi + kc_trans
+
+
+#Haryana
+ord_har <- polr(op_state, data = subset (d19_paddy, State == 1), Hess = T)
+coef_ord <- coef(summary(ord_har))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_har))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#Punjab
+
+ord_pun <- polr(op_state, data = subset (d19_paddy, State == 2), Hess = T)
+coef_ord <- coef(summary(ord_pun))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_pun))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#UP
+
+ord_up <- polr(op_state, data = subset (d19_paddy, State == 3), Hess = T)
+coef_ord <- coef(summary(ord_up))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_up))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
+#Bihar
+
+ord_bh <- polr(op_state, data = subset (d19_paddy, State == 4), Hess = T)
+coef_ord <- coef(summary(ord_bh))
+pval <- pnorm (abs(coef_ord[, "t value"]), lower.tail = F)*2
+coef_pval <- cbind(coef_ord, "p-value" = round (pval, 4))
+or <- exp(coef(ord_bh))
+or_pval <- cbind(coef_pval, "Odds Ratio" = or)
+or_pval
+
