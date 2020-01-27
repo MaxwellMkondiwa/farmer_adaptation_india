@@ -1,9 +1,8 @@
 #######################################################################
-#Objetive: Developing proportional odds model to understand 
-#how different factors influence farmers' adaptations in Northern India
+#Objetive: Developing proportional odds model to understand how different factors influence farmers' adaptations in Northern India
 
-#Author: Asif Ishtiaque (School of Environment and Sustainability, University of Michigan 
-#Note: For files, please contact Asif Ishtiaque at "asis@umich.edu"
+#Author: Asif Ishtiaque (School of Environment and Sustainability, University of Michigan) 
+#Note: The codes are being updated locally. Once they are finalized, a notification will be posted.
 ########################################################################
 
 library (car)
