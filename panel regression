@@ -1,0 +1,304 @@
+library(lfe)
+library (plm)
+library (dplyr)
+library (car)
+library (stargazer)
+
+setwd("C:/Users/asis/Desktop/Sow date")
+
+###################
+#Data preparation
+###################
+
+#Reading data
+data <- read.csv ("final_16_18_19.csv")
+
+#Subsetting data
+data_sub <- subset(data, wheat_sow_date != "NA", select = c(Farmer_Unique_ID, survey_year, State, Site,
+                                                            wheat_sow_date, irrig_canal, irrig_personal , 
+                                                            wheat_sowbroad , wheat_sowdrill , wheat_till_culti , 
+                                                            wheat_till_harrow , ideal_sow_date , kc_duration , 
+                                                            fallow_kcrabi ,kc_harvest_mecha , kc_harvest_manual , 
+                                                            wetend , wetstart , totrain , mondry , 
+                                                            monrain , sdii ))
+#Wet lenght = Wet end - Wet start
+data_sub$wetlen <- data_sub$wetend - data_sub$wetstart
+
+###########################
+#Panel regression models
+###########################
+
+m_1 <- log(wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + wheat_sowdrill + 
+  wheat_till_culti + wheat_till_harrow + ideal_sow_date + kc_duration + fallow_kcrabi +
+  kc_harvest_mecha + kc_harvest_manual + wetend + wetstart + totrain +
+  mondry + monrain + sdii | Farmer_Unique_ID + survey_year
+
+model_1 <- log(wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + wheat_sowdrill + 
+  wheat_till_culti + wheat_till_harrow + ideal_sow_date + kc_duration + fallow_kcrabi +
+  kc_harvest_mecha + kc_harvest_manual + wetend + wetstart + totrain +
+  mondry + monrain + sdii 
+
+m_2 <- log (wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + wheat_sowdrill + 
+  wheat_till_culti + wheat_till_harrow + ideal_sow_date + kc_duration + fallow_kcrabi +
+  kc_harvest_mecha + kc_harvest_manual + wetend + wetstart + totrain + 
+  monrain + sdii | Farmer_Unique_ID + survey_year
+
+model_2 <- log (wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + wheat_sowdrill + 
+  wheat_till_culti + wheat_till_harrow + ideal_sow_date + kc_duration + fallow_kcrabi +
+  kc_harvest_mecha + kc_harvest_manual + wetend + wetstart + totrain + 
+  monrain + sdii 
+
+m_3 <- log (wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + 
+  wheat_till_culti + wheat_till_harrow + ideal_sow_date + kc_duration + fallow_kcrabi +
+  kc_harvest_mecha + kc_harvest_manual + wetend + wetstart + monrain + sdii  | 
+  Farmer_Unique_ID + survey_year
+
+model_3 <- log (wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + 
+  wheat_till_culti + wheat_till_harrow + ideal_sow_date + kc_duration + fallow_kcrabi +
+  kc_harvest_mecha + kc_harvest_manual + wetend + wetstart + monrain + sdii
+
+
+fe_1_lfe <- felm (m_1, data = data_sub)
+fe_2_lfe <- felm (m_2, data = data_sub)
+fe_3_lfe <- felm (m_3, data = data_sub)
+fe_3_plm <- plm (model_3, data = data_sub, model = "within", index = c("Farmer_Unique_ID","survey_year"))
+
+summary (fe_3_lfe)
+summary (fe_3_plm)
+
+##############################
+#Checking Multicollinearity
+##############################
+
+fe_pool_1 <- plm (model_1, data = data_sub, model = 'pooling', index =  c("Farmer_Unique_ID","survey_year"))
+fe_pool_2 <- plm (model_2, data = data_sub, model = 'pooling', index =  c("Farmer_Unique_ID","survey_year"))
+fe_pool_3 <- plm (model_3, data = data_sub, model = 'pooling', index =  c("Farmer_Unique_ID","survey_year"))
+
+vif (fe_pool_1) #bad scores
+vif (fe_pool_2) #alright, but could be better
+vif (fe_pool_3) #this should be okay
+
+
+#####################
+#Modeal Diagnostics
+#####################
+
+#Residuals and fitted values
+res_lfe <- as.numeric(as.character(residuals(fe_3_lfe)))
+fit_lfe <- as.numeric(as.character(fitted(fe_3_lfe)))
+
+plot (fit_lfe, res_lfe, type ='p', xlab = "Fitted values", ylab = "Residuals",
+      main = "Residuals vs Fitted values")
+abline (h = 0, col = "red", lty = "longdash")
+
+#QQ-Plot
+qqnorm(res_lfe, main = "Q-Q Plot of Residuals")
+qqline (res_lfe)
+
+#Boxplot
+boxplot(res_lfe, main = "Residuals Box plot")
+
+#Histogram
+hist(res_lfe, main = "Histogram of Residuals", xlab = "Residuals")
+
+#Testing for time-fixed effect
+plmtest (fe_3_plm, c("time"), type = "bp") #p<0.05 indicates no need of time-fixed effect
+
+
+
+#####################
+#Exporting the output
+#####################
+
+stargazer(fe_3_lfe, type = "html", title = "Fixed Effect Regression (T = 1-2)",
+          dep.var.labels = "Wheat Sow Date", ci.level = 0.9, report = "vc*",
+          covariate.labels = c("Irrigation Use (Canal)", "Irrigation Use (Personal Borewell)",
+                               "Wheat Sowing Method (Broadcast)", "Wheat Tilling Method (Cultiver)",
+                               "Wheat Tilling Method (Harrowing)", "Perceived Ideal Sow Date", 
+                               "Duration of Kharif Crop", "Fallow time (Kharif-Rabi)",
+                               "Kharif Crop Harvesting Method (Mechanical)", 
+                               "Kharif Crop Harvesting Method (Manual)", "Wet Season End Time",
+                               "Wet Season Length", "Total Monsoon Rain", "Simple Daily Intensity Index"),
+          out = "FE_1_2.htm")
+
+
+
+###############################################
+#Panel regression models (to make sure T= 1-3)
+###############################################
+
+
+m_4 <- (wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + wheat_till_culti + 
+  wheat_till_harrow + ideal_sow_date + kc_duration + kc_harvest_mecha +  kc_harvest_manual + 
+  wetend + wetstart + monrain + sdii | Farmer_Unique_ID + survey_year
+
+model_4 <- log(wheat_sow_date) ~ irrig_canal + irrig_personal + wheat_sowbroad + wheat_till_culti + 
+  wheat_till_harrow + ideal_sow_date + kc_duration + kc_harvest_mecha +  kc_harvest_manual + 
+  wetend + wetstart + monrain + sdii
+
+
+
+fe_4_lfe <- felm (m_4, data = data_sub)
+fe_4_plm <- plm (model_4, data = data_sub, model = 'within', 
+                 index =  c("Farmer_Unique_ID","survey_year"))
+fe_4_plm_ran <- plm (model_4, data = data_sub, model = 'random', 
+                 index =  c("Farmer_Unique_ID","survey_year"))
+summary (fe_4_lfe)
+summary (fe_4_plm)
+summary (fe_4_plm_ran)
+
+##############
+#Hausman test 
+#to determine one model between random or fixed
+##############
+
+phtest(fe_4_plm, fe_4_plm_ran)#indicates fixed effect is better
+
+
+##############################
+#Checking Multicollinearity
+##############################
+
+fe_pool_4 <- plm (model_4, data = data_sub, model = 'pooling', index =  c("Farmer_Unique_ID","survey_year"))
+
+vif (fe_pool_4) 
+
+#####################
+#Modeal Diagnostics
+#####################
+
+#Residuals and fitted values
+res_lfe <- as.numeric(as.character(residuals(fe_4_plm)))
+fit_lfe <- as.numeric(as.character(fitted(fe_4_plm)))
+
+plot (fit_lfe, res_lfe, type ='p', xlab = "Fitted values", ylab = "Residuals",
+      main = "Residuals vs Fitted values")
+abline (h = 0, col = "red", lty = "longdash")
+
+#QQ-Plot
+qqnorm(res_lfe, main = "Q-Q Plot of Residuals")
+qqline (res_lfe)
+
+#Boxplot
+boxplot(res_lfe, main = "Residuals Box plot")
+
+#Histogram
+hist(res_lfe, main = "Histogram of Residuals", xlab = "Residuals")
+
+#Testing for time-fixed effect
+plmtest (fe_4_plm, c("time"), type = "bp") 
+#p<0.05 indicates the need of time-fixed effects (effect = twoways)
+
+
+################
+#Final Model
+################
+
+fe_all_india <- plm (model_4, data = data_sub, model = 'within', effect = "twoways",
+                 index =  c("Farmer_Unique_ID","survey_year"))
+
+summary (fe_all_india)
+
+###Tesing for clustered standard error
+
+india_coef <- coeftest(fe_all_india, vcov=vcovHC(fe_all_india, method = "arellano", 
+                                   type="sss", cluster="group"))
+#It indicates that clustered standard error doesn't alter the 
+#std. error of the main model substainatially
+
+
+#####################
+#Exporting the output
+#####################
+
+stargazer(fe_all_india, type = "html", title = "Fixed Effect Regression", style = "all",
+          column.labels = "Study Site: All India", column.separate = NULL,
+          dep.var.labels = "Wheat Sow Date", ci.level = 0.9, report = "vc*",
+          covariate.labels = c("Irrigation Use (Canal)", "Irrigation Use (Personal Borewell)",
+                               "Wheat Sowing Method (Broadcast)", "Wheat Tilling Method (Cultiver)",
+                               "Wheat Tilling Method (Harrowing)", "Perceived Ideal Sow Date", 
+                               "Duration of Kharif Crop", "Fallow time (Kharif-Rabi)",
+                               "Kharif Crop Harvesting Method (Mechanical)", 
+                               "Kharif Crop Harvesting Method (Manual)", "Wet Season End Time",
+                               "Wet Season Length", "Total Monsoon Rain", "Simple Daily Intensity Index"),
+          out = "FE_all_india.htm")
+
+
+
+###############################
+# State wise models
+###############################
+
+
+fe_haryana <- plm (model_4, data = subset(data_sub, State == 1), model = 'within', 
+                   effect = "twoways", index =  c("Farmer_Unique_ID","survey_year"))
+summary (fe_haryana)
+har_coef <- coeftest(fe_haryana, vcov=vcovHC(fe_haryana, method = "arellano", 
+                                   type="sss", cluster=c("group")))
+
+
+fe_punjab <- plm (model_4, data = subset(data_sub, State == 2), model = 'within', 
+                   effect = "twoways", index =  c("Farmer_Unique_ID","survey_year"))
+summary (fe_punjab)
+pun_coef <- coeftest(fe_punjab, vcov=vcovHC(fe_punjab, method = "arellano", 
+                                 type="sss", cluster=c("group")))
+
+
+fe_up <- plm (model_4, data = subset(data_sub, State == 3), model = 'within', 
+                  effect = "twoways", index =  c("Farmer_Unique_ID","survey_year"))
+summary (fe_up)
+up_coef <- coeftest(fe_up, vcov=vcovHC(fe_up, method = "arellano", 
+                                type="sss", cluster=c("group")))
+
+
+fe_bihar <- plm (model_4, data = subset(data_sub, State == 4), model = 'within', 
+                  effect = "twoways", index =  c("Farmer_Unique_ID","survey_year"))
+summary (fe_bihar)
+bihar_coef <- coeftest(fe_bihar, vcov=vcovHC(fe_bihar, method = "arellano", 
+                                type="sss", cluster=c("group")))
+
+
+#############################
+#Exporting the output
+#############################
+
+stargazer(fe_all_india, fe_haryana, fe_punjab, fe_up, fe_bihar,  type = "html", 
+          title = "Fixed Effect Regression", style = "all",
+          column.labels = c("All India", "Haryana", "Punjab", "Uttar Pradesh", "Bihar"), 
+          column.separate = NULL, dep.var.labels = "Wheat Sow Date", ci.level = 0.9, report = "vc*",
+          covariate.labels = c("Irrigation Use (Canal)", "Irrigation Use (Personal Borewell)",
+                               "Wheat Sowing Method (Broadcast)", "Wheat Tilling Method (Cultiver)",
+                               "Wheat Tilling Method (Harrowing)", "Perceived Ideal Sow Date", 
+                               "Duration of Kharif Crop", "Kharif Crop Harvesting Method (Mechanical)", 
+                               "Kharif Crop Harvesting Method (Manual)", "Wet Season End Time",
+                               "Wet Season Length", "Total Monsoon Rain", "Simple Daily Intensity Index"),
+          out = "FE_all_state.htm")
+
+
+stargazer(india_coef, har_coef, pun_coef, up_coef, bihar_coef,  type = "html", 
+          title = "Robust Standard Error Estimates", style = "all",
+          column.labels = c("All India", "Haryana", "Punjab", "Uttar Pradesh", "Bihar"), 
+          column.separate = NULL, dep.var.labels = "Wheat Sow Date", ci.level = 0.9, report = "vc*",
+          covariate.labels = c("Irrigation Use (Canal)", "Irrigation Use (Personal Borewell)",
+                               "Wheat Sowing Method (Broadcast)", "Wheat Tilling Method (Cultiver)",
+                               "Wheat Tilling Method (Harrowing)", "Perceived Ideal Sow Date", 
+                               "Duration of Kharif Crop", "Kharif Crop Harvesting Method (Mechanical)", 
+                               "Kharif Crop Harvesting Method (Manual)", "Wet Season End Time",
+                               "Wet Season Length", "Total Monsoon Rain", "Simple Daily Intensity Index"),
+          out = "FE_all_state_vcov.htm")
+
+
+stargazer(fe_haryana, har_coef, fe_punjab, pun_coef, fe_up, up_coef, fe_bihar, bihar_coef,  
+          type = "html", title = "Robust Standard Error Estimates", style = "all2",
+           dep.var.labels = "Wheat Sow Date", column.labels = c("Haryana", "Punjab", "UP", 
+                                                                "Bihar"),
+          column.separate = c(2,2,2,2),
+          covariate.labels = c("Irrigation Use (Canal)", "Irrigation Use (Personal Borewell)",
+                               "Wheat Sowing Method (Broadcast)", "Wheat Tilling Method (Cultiver)",
+                               "Wheat Tilling Method (Harrowing)", "Perceived Ideal Sow Date", 
+                               "Duration of Kharif Crop", "Kharif Crop Harvesting Method (Mechanical)", 
+                               "Kharif Crop Harvesting Method (Manual)", "Wet Season End Time",
+                               "Wet Season Length", "Total Monsoon Rain", "Simple Daily Intensity Index"),
+          out = "FE_all_state_vcov_se.htm")
+
+
